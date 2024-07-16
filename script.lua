@@ -33,7 +33,6 @@ local blockScale = 1
 function pings.scale(dirowo)
 	if dirowo > 0 then blockScale = blockScale + 0.25 end
 	if dirowo < 0 then blockScale = blockScale - 0.25 end
-	-- if blockScale <= 0 then blockScale = 1 end
 	blocktaskthing:setScale(blockScale)
 	blockScale = math.clamp(blockScale, 0.25, 15)
 	models.blockModel.block:setScale(blockScale)
@@ -45,8 +44,13 @@ function pings.scaleReset()
 	models.blockModel.block:setScale(blockScale)
 end
 
+local snapped
+function pings.enableSnap(bool)
+	snapped = bool
+end
+
 local snapAct = mainPage:newAction()
-	:onToggle(function() end)
+	:onToggle(pings.enableSnap)
 	:title('[{"text":"Toggle Snapping","color":"red"}]')
 	:toggleTitle('[{"text":"Toggle Snapping","color":"green"}]')
 	:hoverColor(0.365, 0.98, 0.847)
@@ -121,15 +125,13 @@ function events.CHAT_SEND_MESSAGE(message)
 	if message:match("^/lockblock") then
 		message = pings.lockBlock(message)
 	end
-	if message == "/tr" then
-		log(commandBlock)
-	end
 	return message
 end
 
 local oldCoords
 local blockTimer = 0
 function events.tick()
+	-- initialize useful variables
 	local blockPos = player:getPos().y - 0.001
 	local fullBlockPos = vec(player:getPos().x, blockPos, player:getPos().z)
 	local biomeType = world.getBiome(fullBlockPos)
@@ -137,10 +139,11 @@ function events.tick()
 	local id = commandBlock and commandBlock or world.getBlockState(fullBlockPos).id
 	local flooredCoords = vec((player:getPos():floor()):unpack())
 
+	-- handle increasing and resetting blockTimer for snapping
 	if oldCoords ~= flooredCoords then blockTimer = 0 end
 	if oldCoords == flooredCoords then blockTimer = blockTimer + 1 end
 	oldCoords = flooredCoords
-	if id == "minecraft:grass_block" then
+	if id == "minecraft:grass_block" then -- apply grass coloring in case they locked it without a command and moved biomes
 		models.blockModel.block.upCube:setColor(grassColor)
 		models.blockModel.block.northOverlay:setColor(grassColor)
 		models.blockModel.block.southOverlay:setColor(grassColor)
@@ -160,6 +163,7 @@ function events.tick()
 		if not commandBlock then
 			blocktaskthing:setVisible(false)
 			models.blockModel.block:setVisible(true)
+			-- create and apply base block textures
 			local upTexture = world.getBlockState(fullBlockPos):getTextures().UP[1] .. ".png"
 			local westTexture = world.getBlockState(fullBlockPos):getTextures().WEST[1] .. ".png"
 			local downTexture = world.getBlockState(fullBlockPos):getTextures().DOWN[1] .. ".png"
@@ -177,7 +181,7 @@ function events.tick()
 			models.blockModel.block.southCube:setPrimaryTexture("RESOURCE", southTexture)
 
 			local northOVTexture, southOVTexture, westOVTexture, eastOVTexture
-			if id == "minecraft:grass_block" then
+			if id == "minecraft:grass_block" then -- apply grass overlays and color
 				northOVTexture = world.getBlockState(fullBlockPos):getTextures().NORTH[2] .. ".png"
 				southOVTexture = world.getBlockState(fullBlockPos):getTextures().SOUTH[2] .. ".png"
 				westOVTexture = world.getBlockState(fullBlockPos):getTextures().WEST[2] .. ".png"
@@ -206,7 +210,7 @@ function events.tick()
 				models.blockModel.block.westOverlay:setColor(1)
 				models.blockModel.block.eastOverlay:setColor(1)
 			end
-
+			-- correctly color leaves
 			if id:find("leaves") and id ~= "minecraft:birch_leaves" and id ~= "minecraft:spruce_leaves" and id ~= "minecraft:cherry_leaves" and not id:find("azalea_leaves") then
 				models.blockModel.block:setColor(biomeType:getFoliageColor())
 			else
@@ -224,7 +228,7 @@ function events.tick()
 			blocktaskthing:setVisible(false)
 			models.blockModel.block:setVisible(true)
 			local lockedBlock = world.newBlock(id, player:getPos())
-
+			-- create and apply base block textures
 			local upTexture2 = lockedBlock:getTextures().UP[1] .. ".png"
 			local westTexture2 = lockedBlock:getTextures().WEST[1] .. ".png"
 			local downTexture2 = lockedBlock:getTextures().DOWN[1] .. ".png"
@@ -240,7 +244,7 @@ function events.tick()
 			models.blockModel.block.southCube:setPrimaryTexture("RESOURCE", southTexture2)
 
 			local northOVTexture2, southOVTexture2, westOVTexture2, eastOVTexture2
-			if id == "minecraft:grass_block" then 
+			if id == "minecraft:grass_block" then -- apply grass overlays and color
 				northOVTexture2 = lockedBlock:getTextures().NORTH[2] .. ".png"
 				southOVTexture2 = lockedBlock:getTextures().SOUTH[2] .. ".png"
 				westOVTexture2 = lockedBlock:getTextures().WEST[2] .. ".png"
@@ -269,7 +273,7 @@ function events.tick()
 				models.blockModel.block.westOverlay:setColor(1)
 				models.blockModel.block.eastOverlay:setColor(1)
 			end
-
+			-- correctly color leaves
 			if id:find("leaves") and id ~= "minecraft:birch_leaves" and id ~= "minecraft:spruce_leaves" and id ~= "minecraft:cherry_leaves" and not id:find("azalea_leaves") then
 				models.blockModel.block:setColor(biomeType:getFoliageColor())
 			else
@@ -286,8 +290,8 @@ function events.tick()
 	end
 end
 
-function events.render(delta)
-	if blockTimer > 30 and snapAct:isToggled() then
+function events.render(delta) -- snapping logic
+	if blockTimer > 30 and snapped then -- change 30 to the number of ticks you desire before snapping happens
 		models.blockModel.blockTask:setParentType("WORLD")
 		models.blockModel.blockTask:setPos(
 			(math.floor(player:getPos(delta).x) * 16) + ((blockScale - 1) * -8),
