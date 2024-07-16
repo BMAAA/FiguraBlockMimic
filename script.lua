@@ -143,6 +143,7 @@ function events.tick()
 	if oldCoords ~= flooredCoords then blockTimer = 0 end
 	if oldCoords == flooredCoords then blockTimer = blockTimer + 1 end
 	oldCoords = flooredCoords
+	-- log(id)
 	if id == "minecraft:grass_block" then -- apply grass coloring in case they locked it without a command and moved biomes
 		models.blockModel.block.upCube:setColor(grassColor)
 		models.blockModel.block.northOverlay:setColor(grassColor)
@@ -153,7 +154,7 @@ function events.tick()
 	if id ~= "minecraft:grass_block" and not id:find("leaves") then -- they have a block that is not grass or leaves
 		blocktaskthing:setLight(world.getBlockLightLevel(player:getPos()),
 			world.getSkyLightLevel(player:getPos()))
-		if id == "minecraft:air" or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or id == "minecraft:void_air" or id == "minecraft:cave_air" or lock then return end
+		if id == "minecraft:air" or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or id == "minecraft:void_air" or id == "minecraft:cave_air" or (lock and not commandBlock) then return end
 
 		models.blockModel.block:setVisible(false)
 		blocktaskthing:setVisible(true)
