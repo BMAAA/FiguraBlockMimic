@@ -9,16 +9,16 @@ local runLater = require("runLater")
 local mainPage = action_wheel:newPage()
 action_wheel:setPage(mainPage)
 
+local currBlock
+local commandBlock
+
 local lock = false
-local commandBlock = false
 function pings.lock(boo)
 	lock = boo
-	if not boo then
-		commandBlock = false
-	end
+	if not boo then commandBlock = false end
 end
 
-local locAct = mainPage:newAction()
+local lockAct = mainPage:newAction()
 	:onToggle(pings.lock)
 	:item("minecraft:iron_block")
 	:hoverColor(1, 0.8470588235294118, 0.00392156862745098)
@@ -27,13 +27,17 @@ local locAct = mainPage:newAction()
 
 models.blockModel.block:setVisible(false)
 models.blockModel.block:setScale(math.worldScale)
-local blocktaskthing = models.blockModel.blockTask:newBlock("hi")
+local blocktaskthing = models.blockModel.blockTask:newBlock("Block Mimic")
+local upperblocktask = models.blockModel.blockTaskUp:newBlock("Upper Mimic")
 blocktaskthing:setScale(math.worldScale)
+upperblocktask:setScale(math.worldScale) -- these two lines align perfectly and i think thats pretty cool :smile+1:
+
 local blockScale = 1
 function pings.scale(dirowo)
 	if dirowo > 0 then blockScale = blockScale + 0.25 end
 	if dirowo < 0 then blockScale = blockScale - 0.25 end
 	blocktaskthing:setScale(blockScale)
+	upperblocktask:setScale(blockScale)
 	blockScale = math.clamp(blockScale, 0.25, 15)
 	models.blockModel.block:setScale(blockScale)
 end
@@ -41,6 +45,7 @@ end
 function pings.scaleReset()
 	blockScale = 1
 	blocktaskthing:setScale(blockScale)
+	upperblocktask:setScale(blockScale)
 	models.blockModel.block:setScale(blockScale)
 end
 
@@ -82,10 +87,11 @@ local scaleAct = mainPage:newAction()
 function pings.lockBlock(message)
 	if message:match("^/lockblock%s+%S+$") then
 		if pcall(world.newBlock, "minecraft:" .. message:sub(12)) then
-			locAct:setToggled(true)
+			lockAct:setToggled(true)
 			lock = true
-			blocktaskthing:setBlock("minecraft:" .. message:sub(12))
-			commandBlock = "minecraft:" .. message:sub(12)
+			commandBlock = true
+			currBlock = world.newBlock("minecraft:" .. message:sub(12))
+			blocktaskthing:setBlock(currBlock)
 			local blockname
 			if pcall(function()
 					local _ = world.newItem("minecraft:" .. message:sub(12)):getName()
@@ -102,13 +108,13 @@ function pings.lockBlock(message)
 		else
 			logJson('{"text":"Your provided block of ' ..
 				message:sub(12) .. ' was invalid.","color":"#FF0000"}')
-			commandBlock = false
 			host:appendChatHistory(message)
 			return nil
 		end
 	elseif message:match("^/lockblock%s*$") then
-		locAct:setToggled(not lock)
+		lockAct:setToggled(not lock)
 		lock = not lock
+		if not lock then commandBlock = false end
 		if lock then
 			logJson('{"text":"Block locking enabled","color":"#32CD32"}')
 		else
@@ -120,8 +126,12 @@ function pings.lockBlock(message)
 	end
 	return message
 end
-
+local id
 function events.CHAT_SEND_MESSAGE(message)
+	if message:find("/r") then
+		log(currBlock)
+		return nil
+	end
 	if message:match("^/lockblock") then
 		message = pings.lockBlock(message)
 	end
@@ -130,39 +140,59 @@ end
 
 local oldCoords
 local blockTimer = 0
+local largest = 0
+
 function events.tick()
 	-- initialize useful variables
-	local blockPos = player:getPos().y - 0.001
-	local fullBlockPos = vec(player:getPos().x, blockPos, player:getPos().z)
+	local fullBlockPos = player:getPos():sub(0, 0.001, 0)
 	local biomeType = world.getBiome(fullBlockPos)
 	local grassColor = biomeType:getGrassColor()
-	local id = commandBlock and commandBlock or world.getBlockState(fullBlockPos).id
 	local flooredCoords = vec((player:getPos():floor()):unpack())
+	local idState = world.getBlockState(fullBlockPos)
+	id = idState.id
+
+	currBlock = currBlock or idState
+
+	if currBlock:getProperties()["half"] ~= nil and not currBlock:isAir() and not currBlock.id:find("stairs") and not currBlock.id:find("trapdoor") then
+		upperblocktask:setVisible(true)
+		upperblocktask:setBlock(currBlock.id .. "[half=upper]")
+		largest = largest * 2
+	elseif (currBlock:getProperties()["half"] == nil or currBlock.id:find("stairs") or currBlock.id:find("trapdoor")) and not currBlock:isAir() then
+		upperblocktask:setVisible(false)
+	end
 
 	-- handle increasing and resetting blockTimer for snapping
 	if oldCoords ~= flooredCoords then blockTimer = 0 end
 	if oldCoords == flooredCoords then blockTimer = blockTimer + 1 end
 	oldCoords = flooredCoords
-	-- log(id)
-	if id == "minecraft:grass_block" then -- apply grass coloring in case they locked it without a command and moved biomes
+	if currBlock == "minecraft:grass_block" then -- apply grass coloring in case they locked it without a command and moved biomes
 		models.blockModel.block.upCube:setColor(grassColor)
 		models.blockModel.block.northOverlay:setColor(grassColor)
 		models.blockModel.block.southOverlay:setColor(grassColor)
 		models.blockModel.block.westOverlay:setColor(grassColor)
 		models.blockModel.block.eastOverlay:setColor(grassColor)
 	end
-	if id ~= "minecraft:grass_block" and not id:find("leaves") then -- they have a block that is not grass or leaves
-		blocktaskthing:setLight(world.getBlockLightLevel(player:getPos()),
-			world.getSkyLightLevel(player:getPos()))
-		if id == "minecraft:air" or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or id == "minecraft:void_air" or id == "minecraft:cave_air" or (lock and not commandBlock) then return end
+
+	if id ~= "minecraft:grass_block" and not id:find("leaves") and not commandBlock then 
+		blocktaskthing:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
+		upperblocktask:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
+		if idState:isAir() or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or (lock and not commandBlock) then return end
 
 		models.blockModel.block:setVisible(false)
 		blocktaskthing:setVisible(true)
 		blocktaskthing:setBlock(id)
+		currBlock = idState
+	elseif commandBlock and currBlock.id ~= "minecraft:grass_block" and not currBlock.id:find("leaves") then
+		blocktaskthing:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
+		upperblocktask:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
+
+		models.blockModel.block:setVisible(false)
+		blocktaskthing:setVisible(true)
 	else -- they have a non /lockblock block that is grass or leaves
-		if id == "minecraft:air" or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or id == "minecraft:void_air" or id == "minecraft:cave_air" or (lock and not commandBlock) then return end
-		if not commandBlock then
+		if idState:isAir() or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or (lock and not commandBlock) then return end
+		if not currBlock.id ~= id then
 			blocktaskthing:setVisible(false)
+			upperblocktask:setVisible(false)
 			models.blockModel.block:setVisible(true)
 			-- create and apply base block textures
 			local upTexture = world.getBlockState(fullBlockPos):getTextures().UP[1] .. ".png"
@@ -227,6 +257,7 @@ function events.tick()
 
 		else -- they have a locked block from the /lockblock command that is grass or leaves
 			blocktaskthing:setVisible(false)
+			upperblocktask:setVisible(false)
 			models.blockModel.block:setVisible(true)
 			local lockedBlock = world.newBlock(id, player:getPos())
 			-- create and apply base block textures
@@ -245,7 +276,7 @@ function events.tick()
 			models.blockModel.block.southCube:setPrimaryTexture("RESOURCE", southTexture2)
 
 			local northOVTexture2, southOVTexture2, westOVTexture2, eastOVTexture2
-			if id == "minecraft:grass_block" then -- apply grass overlays and color
+			if currBlock.id == "minecraft:grass_block" then -- apply grass overlays and color
 				northOVTexture2 = lockedBlock:getTextures().NORTH[2] .. ".png"
 				southOVTexture2 = lockedBlock:getTextures().SOUTH[2] .. ".png"
 				westOVTexture2 = lockedBlock:getTextures().WEST[2] .. ".png"
@@ -275,16 +306,16 @@ function events.tick()
 				models.blockModel.block.eastOverlay:setColor(1)
 			end
 			-- correctly color leaves
-			if id:find("leaves") and id ~= "minecraft:birch_leaves" and id ~= "minecraft:spruce_leaves" and id ~= "minecraft:cherry_leaves" and not id:find("azalea_leaves") then
+			if currBlock.id:find("leaves") and id ~= "minecraft:birch_leaves" and id ~= "minecraft:spruce_leaves" and id ~= "minecraft:cherry_leaves" and not id:find("azalea_leaves") then
 				models.blockModel.block:setColor(biomeType:getFoliageColor())
 			else
 				models.blockModel.block:setColor(1)
 			end
-			if id == "minecraft:birch_leaves" then
+			if currBlock.id == "minecraft:birch_leaves" then
 				models.blockModel.block:setColor(0.5019607843137255, 0.6549019607843137,
 					0.3333333333333333)
 			end
-			if id == "minecraft:spruce_leaves" then
+			if currBlock.id == "minecraft:spruce_leaves" then
 				models.blockModel.block:setColor(0.3803921568627451, 0.6, 0.3803921568627451)
 			end
 		end
@@ -301,6 +332,14 @@ function events.render(delta) -- snapping logic
 		blocktaskthing:setPos(0, 0, 0)
 		blocktaskthing:setScale(blockScale)
 
+		models.blockModel.blockTaskUp:setParentType("WORLD")
+		models.blockModel.blockTaskUp:setPos(
+			(math.floor(player:getPos(delta).x) * 16) + ((blockScale - 1) * -8),
+			player:getPos(delta).y * 16,
+			(math.floor(player:getPos(delta).z) * 16) + ((blockScale - 1) * -8))
+		upperblocktask:setPos(0, 0, 0)
+		upperblocktask:setScale(blockScale)
+
 		models.blockModel.block:setParentType("WORLD")
 		models.blockModel.block:setPos((math.floor(player:getPos(delta).x) * 16) + 8,
 			(player:getPos(delta).y * 16) + 0.001, (math.floor(player:getPos(delta).z) * 16) + 8)
@@ -308,6 +347,8 @@ function events.render(delta) -- snapping logic
 	else
 		models.blockModel.blockTask:setParentType("NONE")
 		models.blockModel.blockTask:setPos(0, 0, 0)
+		models.blockModel.blockTaskUp:setParentType("NONE")
+		models.blockModel.blockTaskUp:setPos(0, 0, 0)
 
 		models.blockModel.block:setParentType("NONE")
 		models.blockModel.block:setPos(0, 0, 0)
@@ -315,6 +356,8 @@ function events.render(delta) -- snapping logic
 	if models.blockModel.blockTask:getParentType() == "None" then
 		blocktaskthing:setPos(blockScale * -8, 0, blockScale * -8)
 		blocktaskthing:setScale(blockScale * math.worldScale)
+		upperblocktask:setPos(blockScale * -8, 0, blockScale * -8)
+		upperblocktask:setScale(blockScale * math.worldScale)
 		models.blockModel.block:setScale(blockScale * math.worldScale)
 	end
 end
