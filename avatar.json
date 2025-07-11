@@ -1,8 +1,9 @@
 {
     "name": "Block Mimic",
-    "description": "mimic",
+    "description": "Riftlight's Block Mimic, with some __BMA__'s improvments",
     "authors": [
-    "Riftlight"
+        "Riftlight",
+        "__BMA__"
     ],
-    "color": "#9524F2"
-    }
+    "color": "#ffcc1f"
+}

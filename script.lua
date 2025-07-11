@@ -3,7 +3,7 @@ vanilla_model.ARMOR:setVisible(false)
 vanilla_model.CAPE:setVisible(false)
 vanilla_model.ELYTRA:setVisible(false)
 vanilla_model.PLAYER:setVisible(false)
-
+nameplate.ENTITY:setVisible(false) -- Hides the nickname so as not to ruin the hide-and-seek
 
 local runLater = require("runLater")
 local mainPage = action_wheel:newPage()
@@ -83,6 +83,27 @@ local scaleAct = mainPage:newAction()
 	:hoverColor(0.19607843137, 0.80392156862, 0.19607843137)
 	:title('[{"text":"Scale Block","color":"#affab8"}]')
 
+function pings.lockLookedBlock()
+  local blockState, hitPos, side = player:getTargetedBlock(false, 5)
+
+  if blockState and blockState.id ~= "minecraft:air" then
+    currBlock = blockState
+    lockAct:setToggled(true)
+    lock = true
+    commandBlock = true
+    snapAct:setToggled(true)
+    blocktaskthing:setBlock(currBlock)
+    logJson(string.format('{"text":"Becoming block: %s","color":"#32CD32"}', currBlock.id))
+  else
+    logJson('{"text":"No block in sight.","color":"#FF0000"}')
+  end
+end
+
+local lookAct = mainPage:newAction()
+  :title('[{"text":"Set block","color":"red"}]')
+  :item("minecraft:spyglass")
+  :hoverColor(1, 0.847, 0.0039)
+  :onLeftClick(pings.lockLookedBlock)
 
 function pings.lockBlock(message)
 	if message:match("^/lockblock%s+%S+$") then
@@ -173,7 +194,7 @@ function events.tick()
 		models.blockModel.block.eastOverlay:setColor(grassColor)
 	end
 
-	if id ~= "minecraft:grass_block" and not id:find("leaves") and not commandBlock then 
+	if id ~= "minecraft:grass_block" and not id:find("leaves") and not commandBlock then
 		blocktaskthing:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
 		upperblocktask:setLight(world.getBlockLightLevel(player:getPos()), world.getSkyLightLevel(player:getPos()))
 		if idState:isAir() or id == "minecraft:water" or id == "minecraft:lava" or id == "minecraft:light" or (lock and not commandBlock) then return end
